@@ -62,6 +62,7 @@ struct nullb_page {
 #define NULLB_PAGE_LOCK (MAP_SZ - 1)
 #define NULLB_PAGE_FREE (MAP_SZ - 2)
 
+static struct rb_root rock_tree_root = RB_ROOT;
 static LIST_HEAD(nullb_list);
 static struct mutex lock;
 static int null_major;
@@ -1272,6 +1273,45 @@ static int null_handle_flush(struct nullb *nullb)
 	return err;
 }
 
+static bool rocks_rb_tree_search(struct rb_root *root, unsigned int offset)
+{
+	struct rb_node *node = root->rb_node;
+	while (node) {
+		struct rocks_rq *data = container_of(node, struct rocks_rq, node);
+		int result;
+		result = offset - data->offset;
+		
+		if (result < 0)
+			node = node->rb_left;
+		else if (result > 0)
+			node = node->rb_right;
+		else
+			return true;
+	}
+	return false;
+}
+
+static bool rocks_rb_tree_insert(struct rb_root *root, struct rocks_rq *data)
+{
+	struct rb_node **new = &(root->rb_node), *parent = NULL;
+	while(*new) {
+		struct rocks_rq *this = container_of(*new, struct rocks_rq, node);
+		int result = data->offset - this->offset;
+		
+		parent = *new;
+		if (result < 0)
+			new = &((*new)->rb_left);
+		else if (result > 0 )
+			new = &((*new)->rb_right);
+		else
+			return false;
+	}
+	rb_link_node(&data->node, parent, new);
+	rb_insert_color(&data->node,root);
+	return true;
+}
+
+
 static int null_transfer(struct nullb *nullb, struct page *page,
 	unsigned int len, unsigned int off, bool is_write, sector_t sector,
 	bool is_fua, struct cur_rock_rq *cur_rock)
@@ -1322,6 +1362,23 @@ static int null_handle_rq(struct nullb_cmd *cmd)
 	cur_rock->pre_src = NULL;
 	cur_rock->left_bytes = blk_rq_bytes(rq);
 	cur_rock->rock_bb_offset = (cmd->rq->bio->rock_addr) % PAGE_SIZE;
+	
+	if(op_is_write(req_op(rq)) 
+			&& (zone->type != BLK_ZONE_TYPE_CONVENTIONAL 
+				&& cur_rock->dio_tag == true)){
+		struct rocks_rq *temp_rocks_rq = kmalloc(sizeof(struct rocks_rq),
+				GFP_KERNEL);
+		temp_rocks_rq->length = cmd->rq->__data_len;
+		temp_rocks_rq->offset = rq->bio->rock_addr;
+		if(!rocks_rb_tree_insert(&rock_tree_root, temp_rocks_rq))
+                      pr_info("RB_TREE insert failed");
+	}else if(!op_is_write(req_op(rq))
+			&& zone->type != BLK_ZONE_TYPE_CONVENTIONAL 
+			&& cur_rock->dio_tag == true 
+			&&rq->bio->rock_addr != 0){
+		if(!rocks_rb_tree_search(&rock_tree_root, rq->bio->rock_addr))
+			return BLK_STS_IOERR;
+    }
 
 	spin_lock_irq(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {

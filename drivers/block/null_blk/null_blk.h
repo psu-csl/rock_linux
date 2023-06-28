@@ -26,6 +26,14 @@ struct cur_rock_rq {
        u64 rock_addr;  // for write
 };
 
+struct rocks_rq {
+        struct rb_node node;
+        unsigned long offset;
+        unsigned long length;
+
+};
+
+
 struct nullb_cmd {
 	struct request *rq;
 	struct bio *bio;
