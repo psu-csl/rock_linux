@@ -1054,14 +1054,55 @@ again:
 }
 
 static int copy_to_nullb(struct nullb *nullb, struct page *source,
-	unsigned int off, sector_t sector, size_t n, bool is_fua)
+	unsigned int off, sector_t sector, size_t n, bool is_fua,
+       	struct cur_rock_rq *cur_rock)
 {
 	size_t temp, count = 0;
 	unsigned int offset;
 	struct nullb_page *t_page;
 	void *dst, *src;
 
-	while (count < n) {
+	unsigned int rock_bb_offset = cur_rock->rock_bb_offset;
+	if(zone->type == BLK_ZONE_TYPE_SEQWRITE_REQ 
+			&& cur_rock->dio_tag == true ){
+		offset = cur_rock->rock_addr;
+		goto zone_write;
+       }else
+	       goto normal_write;
+
+	/* zone used for indicating zone type*/
+	struct nullb_device *dev = nullb->dev;
+       	unsigned int zno = sector >> ilog2(dev->zone_size_sects);
+       	struct nullb_zone *zone = &dev->zones[zno];
+zone_write:
+	t_page = null_insert_page(nullb, sector,
+			!null_cache_active(nullb) || is_fua);
+	if (!t_page)
+		return -ENOSPC;
+	src = kmap_atomic(source);
+	dst = kmap_atomic(t_page->page);
+	unsigned int page_left_bytes = PAGE_SIZE - rock_bb_offset;
+	
+	if(n <= page_left_bytes)
+		memcpy(dst + rock_bb_offset, src, n);
+	else{
+		memcpy(dst + rock_bb_offset, src, page_left_bytes);
+		kunmap_atomic(dst);
+		t_page = null_insert_page(nullb, sector + 8,
+				!null_cache_active(nullb) || is_fua);
+		dst = kmap_atomic(t_page->page);
+		memcpy(dst, src + page_left_bytes, n - page_left_bytes);
+               }
+	kunmap_atomic(dst);
+	kunmap_atomic(src);
+
+	zone->wp += n;
+       if (is_fua)
+               null_free_sector(nullb, sector, true);
+       return 0;
+
+normal_write:
+       while (count < n) {
 		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
 		if (null_cache_active(nullb) && !is_fua)
@@ -1091,7 +1132,8 @@ static int copy_to_nullb(struct nullb *nullb, struct page *source,
 }
 
 static int copy_from_nullb(struct nullb *nullb, struct page *dest,
-	unsigned int off, sector_t sector, size_t n)
+	unsigned int off, sector_t sector, size_t n,
+       	struct cur_rock_rq *cur_rock)
 {
 	size_t temp, count = 0;
 	unsigned int offset;
@@ -1175,7 +1217,7 @@ static int null_handle_flush(struct nullb *nullb)
 
 static int null_transfer(struct nullb *nullb, struct page *page,
 	unsigned int len, unsigned int off, bool is_write, sector_t sector,
-	bool is_fua)
+	bool is_fua, struct cur_rock_rq *cur_rock)
 {
 	struct nullb_device *dev = nullb->dev;
 	unsigned int valid_len = len;
@@ -1188,7 +1230,7 @@ static int null_transfer(struct nullb *nullb, struct page *page,
 
 		if (valid_len) {
 			err = copy_from_nullb(nullb, page, off,
-				sector, valid_len);
+				sector, valid_len, cur_rock);
 			off += valid_len;
 			len -= valid_len;
 		}
@@ -1198,7 +1240,7 @@ static int null_transfer(struct nullb *nullb, struct page *page,
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		err = copy_to_nullb(nullb, page, off, sector, len, is_fua);
+		err = copy_to_nullb(nullb, page, off, sector, len, is_fua, cur_rock);
 	}
 
 	return err;
@@ -1213,13 +1255,23 @@ static int null_handle_rq(struct nullb_cmd *cmd)
 	sector_t sector = blk_rq_pos(rq);
 	struct req_iterator iter;
 	struct bio_vec bvec;
+       
+	u64 nr_bytes = blk_rq_bytes(rq);
+	struct cur_rock_rq *cur_rock = kmalloc(sizeof(struct cur_rock_rq),GFP_KERNEL);
+	cur_rock->rock_addr = rq->bio->rock_addr;
+	cur_rock->dio_tag = rq->bio->dio_tag & (~(rq->bio->buffer_io_tag));
+	cur_rock->cur_dst = NULL;
+	cur_rock->pre_dst = NULL;
+	cur_rock->pre_src = NULL;
+	cur_rock->left_bytes = blk_rq_bytes(rq);
+	cur_rock->rock_bb_offset = (cmd->rq->bio->rock_addr) % PAGE_SIZE;
 
 	spin_lock_irq(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {
 		len = bvec.bv_len;
 		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
 				     op_is_write(req_op(rq)), sector,
-				     rq->cmd_flags & REQ_FUA);
+				     rq->cmd_flags & REQ_FUA, cur_rock);
 		if (err) {
 			spin_unlock_irq(&nullb->lock);
 			return err;
@@ -1246,7 +1298,7 @@ static int null_handle_bio(struct nullb_cmd *cmd)
 		len = bvec.bv_len;
 		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
 				     op_is_write(bio_op(bio)), sector,
-				     bio->bi_opf & REQ_FUA);
+				     bio->bi_opf & REQ_FUA, NULL);
 		if (err) {
 			spin_unlock_irq(&nullb->lock);
 			return err;
