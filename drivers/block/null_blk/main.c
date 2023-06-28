@@ -897,9 +897,11 @@ static struct nullb_page *__null_lookup_page(struct nullb *nullb,
 	root = is_cache ? &nullb->dev->cache : &nullb->dev->data;
 	t_page = radix_tree_lookup(root, idx);
 	WARN_ON(t_page && t_page->page->index != idx);
-
-	if (t_page && (for_write || test_bit(sector_bit, t_page->bitmap)))
-		return t_page;
+	if(t_page)
+                return t_page;
+	
+//	if (t_page && (for_write || test_bit(sector_bit, t_page->bitmap)))
+//		return t_page;
 
 	return NULL;
 }
@@ -1072,8 +1074,9 @@ static int copy_to_nullb(struct nullb *nullb, struct page *source,
 
 	/* zone used for indicating zone type*/
 	struct nullb_device *dev = nullb->dev;
-       	unsigned int zno = sector >> ilog2(dev->zone_size_sects);
-       	struct nullb_zone *zone = &dev->zones[zno];
+	unsigned int zno = sector >> ilog2(dev->zone_size_sects);
+	struct nullb_zone *zone = &dev->zones[zno];
+
 zone_write:
 	t_page = null_insert_page(nullb, sector,
 			!null_cache_active(nullb) || is_fua);
@@ -1139,7 +1142,61 @@ static int copy_from_nullb(struct nullb *nullb, struct page *dest,
 	unsigned int offset;
 	struct nullb_page *t_page;
 	void *dst, *src;
+	
+	struct nullb_device *dev = nullb->dev;
+	unsigned int zno = sector >> ilog2(dev->zone_size_sects);
+	struct nullb_zone *zone = &dev->zones[zno];
+	unsigned int rock_bb_offset = cur_rock->rock_bb_offset;
+	
+	t_page = null_lookup_page(nullb, sector, false,
+			!null_cache_active(nullb));
+	cur_rock->cur_src = t_page->page;
+	
+	if(zone->type == BLK_ZONE_TYPE_SEQWRITE_REQ 
+			&& cur_rock->dio_tag == true)
+		goto zone_read;
+	else
+		goto normal_read;
 
+zone_read:
+	unsigned int page_left_bytes = PAGE_SIZE - rock_bb_offset;
+
+	if(cur_rock->left_bytes > page_left_bytes){
+		src = kmap_atomic(cur_rock->cur_src);
+		dst = kmap_atomic(dest);
+		memcpy(dst, src + rock_bb_offset, page_left_bytes);
+		kunmap_atomic(src);
+		cur_rock->pre_src = t_page->page;
+		cur_rock->left_bytes -= page_left_bytes;
+               //boundary case:
+	       if(rock_bb_offset){
+		       t_page = null_lookup_page(nullb, sector + 8,
+				       false, !null_cache_active(nullb));
+		       src = kmap_atomic(t_page->page);
+		       unsigned int remain_size = min_t(unsigned int,
+				       cur_rock->left_bytes, rock_bb_offset);
+		       memcpy(dst + page_left_bytes, src, remain_size);
+		       kunmap_atomic(src);
+		       kunmap_atomic(dst);
+		       cur_rock->left_bytes -= remain_size;
+		       cur_rock->pre_src = t_page->page;
+		       cur_rock->pre_dst = dest;
+	       }
+	}else{
+		unsigned int read_size = min_t(unsigned int,
+				cur_rock->left_bytes, page_left_bytes);
+		src = kmap_atomic(cur_rock->cur_src);
+		dst = kmap_atomic(dest);
+		memcpy(dst, src + rock_bb_offset, read_size);
+		cur_rock->pre_src = t_page->page;
+		cur_rock->pre_dst = dest;
+		kunmap_atomic(dst);
+		kunmap_atomic(src);
+	}
+
+ 	return 0;
+
+normal_read:
 	while (count < n) {
 		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
@@ -1268,6 +1325,7 @@ static int null_handle_rq(struct nullb_cmd *cmd)
 
 	spin_lock_irq(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {
+		cur_rock->cur_dst = bvec.bv_page;
 		len = bvec.bv_len;
 		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
 				     op_is_write(req_op(rq)), sector,
