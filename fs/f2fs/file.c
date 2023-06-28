@@ -4256,7 +4256,7 @@ static bool f2fs_should_use_dio(struct inode *inode, struct kiocb *iocb,
 	align = iocb->ki_pos | iov_iter_alignment(iter);
 	if (!IS_ALIGNED(align, i_blocksize(inode)) &&
 	    IS_ALIGNED(align, bdev_logical_block_size(inode->i_sb->s_bdev)))
-		return false;
+//		return false;
 
 	return true;
 }

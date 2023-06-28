@@ -4477,19 +4477,19 @@ static inline bool f2fs_force_buffered_io(struct inode *inode,
 		return true;
 
 	/* disallow direct IO if any of devices has unaligned blksize */
-	if (f2fs_is_multi_device(sbi) && !sbi->aligned_blksize)
-		return true;
+//	if (f2fs_is_multi_device(sbi) && !sbi->aligned_blksize)
+	//	return true;
 	/*
 	 * for blkzoned device, fallback direct IO to buffered IO, so
 	 * all IOs can be serialized by log-structured write.
 	 */
 	if (f2fs_sb_has_blkzoned(sbi))
-		return true;
-	if (f2fs_lfs_mode(sbi) && (rw == WRITE)) {
-		if (block_unaligned_IO(inode, iocb, iter))
-			return true;
-		if (F2FS_IO_ALIGNED(sbi))
-			return true;
+	//	return true;
+//	if (f2fs_lfs_mode(sbi) && (rw == WRITE)) {
+//		if (block_unaligned_IO(inode, iocb, iter))
+//			return true;
+//		if (F2FS_IO_ALIGNED(sbi))
+//			return true;
 	}
 	if (is_sbi_flag_set(F2FS_I_SB(inode), SBI_CP_DISABLED))
 		return true;
