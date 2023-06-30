@@ -54,6 +54,8 @@ struct iomap_dio {
 static void iomap_dio_submit_bio(const struct iomap_iter *iter,
 		struct iomap_dio *dio, struct bio *bio, loff_t pos)
 {
+	bio->rock_addr = iter->inode->rock_addr;
+	bio->buffer_io_tag = false;
 	atomic_inc(&dio->ref);
 
 	if (dio->iocb->ki_flags & IOCB_HIPRI) {

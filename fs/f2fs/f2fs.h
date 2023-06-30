@@ -647,6 +647,7 @@ struct extent_tree {
 				F2FS_MAP_UNWRITTEN)
 
 struct f2fs_map_blocks {
+	int m_bytes_len;	/* f2fs iomap length */
 	struct block_device *m_bdev;	/* for multi-device dio */
 	block_t m_pblk;
 	block_t m_lblk;
@@ -764,6 +765,7 @@ enum {
 };
 
 struct f2fs_inode_info {
+	u64 rock_addr;			/* rock address in f2fs */
 	struct inode vfs_inode;		/* serve a vfs inode */
 	unsigned long i_flags;		/* keep an inode flags for ioctl */
 	unsigned char i_advise;		/* use to give file attribute hints */
@@ -1589,6 +1591,12 @@ struct decompress_io_ctx {
 #define MAX_COMPRESS_WINDOW_SIZE(log_size)	((PAGE_SIZE) << (log_size))
 
 struct f2fs_sb_info {
+	int left_bytes;		/*to indicate left bytes in last page */
+	u64 cur_blkaddr;
+	u64 rock_addr;
+	bool is_last_page_unfull;
+	bool need_refresh;
+	unsigned int cur_rq_length;
 	struct super_block *sb;			/* pointer to VFS super block */
 	struct proc_dir_entry *s_proc;		/* proc entry */
 	struct f2fs_super_block *raw_super;	/* raw super block pointer */

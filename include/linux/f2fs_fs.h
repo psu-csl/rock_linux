@@ -233,6 +233,7 @@ struct f2fs_extent {
 #define F2FS_COMPRESS_RELEASED	0x80	/* file released compressed blocks */
 
 struct f2fs_inode {
+	__le64 rock_addr;		/* rock addr in f2fs */
 	__le16 i_mode;			/* file mode */
 	__u8 i_advise;			/* file hints */
 	__u8 i_inline;			/* file inline flags */
@@ -244,10 +245,10 @@ struct f2fs_inode {
 	__le64 i_atime;			/* access time */
 	__le64 i_ctime;			/* change time */
 	__le64 i_mtime;			/* modification time */
-	__le32 i_atime_nsec;		/* access time in nano scale */
-	__le32 i_ctime_nsec;		/* change time in nano scale */
-	__le32 i_mtime_nsec;		/* modification time in nano scale */
-	__le32 i_generation;		/* file version (for NFS) */
+	__le16 i_atime_nsec;		/* access time in nano scale */
+	__le16 i_ctime_nsec;		/* change time in nano scale */
+	__le16 i_mtime_nsec;		/* modification time in nano scale */
+	__le16 i_generation;		/* file version (for NFS) */
 	union {
 		__le32 i_current_depth;	/* only for directory depth */
 		__le16 i_gc_failures;	/*

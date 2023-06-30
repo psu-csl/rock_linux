@@ -75,6 +75,7 @@ enum mq_rq_state {
  * especially blk_mq_rq_ctx_init() to take care of the added fields.
  */
 struct request {
+	u64 rock_addr;
 	struct request_queue *q;
 	struct blk_mq_ctx *mq_ctx;
 	struct blk_mq_hw_ctx *mq_hctx;

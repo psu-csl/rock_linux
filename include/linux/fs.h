@@ -583,6 +583,7 @@ struct fsnotify_mark_connector;
  * of the 'struct inode'
  */
 struct inode {
+	u64			rock_addr; /* byte address of request */
 	umode_t			i_mode;
 	unsigned short		i_opflags;
 	kuid_t			i_uid;

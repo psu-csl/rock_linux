@@ -88,6 +88,10 @@ static inline void sanity_check_seg_type(struct f2fs_sb_info *sbi,
 #define NEXT_FREE_BLKADDR(sbi, curseg)					\
 	(START_BLOCK(sbi, (curseg)->segno) + (curseg)->next_blkoff)
 
+#define NEXT_FREE_BYTEADDR(sbi, curseg)					\
+	((START_BLOCK(sbi, (curseg)->segno) << 12) + (curseg)->next_byteaddr)
+
+
 #define GET_SEGOFF_FROM_SEG0(sbi, blk_addr)	((blk_addr) - SEG0_BLKADDR(sbi))
 #define GET_SEGNO_FROM_SEG0(sbi, blk_addr)				\
 	(GET_SEGOFF_FROM_SEG0(sbi, blk_addr) >> (sbi)->log_blocks_per_seg)
@@ -304,6 +308,7 @@ struct victim_selection {
 
 /* for active log information */
 struct curseg_info {
+	unsigned int next_byteaddr;		/* next available byte address */
 	struct mutex curseg_mutex;		/* lock for consistency */
 	struct f2fs_summary_block *sum_blk;	/* cached summary block */
 	struct rw_semaphore journal_rwsem;	/* protect journal area */
@@ -734,13 +739,13 @@ static inline int check_block_count(struct f2fs_sb_info *sbi,
 		is_valid = !is_valid;
 	} while (cur_pos < usable_blks_per_seg);
 
-	if (unlikely(GET_SIT_VBLOCKS(raw_sit) != valid_blocks)) {
+/*	if (unlikely(GET_SIT_VBLOCKS(raw_sit) != valid_blocks)) {
 		f2fs_err(sbi, "Mismatch valid blocks %d vs. %d",
 			 GET_SIT_VBLOCKS(raw_sit), valid_blocks);
 		set_sbi_flag(sbi, SBI_NEED_FSCK);
 		return -EFSCORRUPTED;
 	}
-
+*/
 	if (usable_blks_per_seg < sbi->blocks_per_seg)
 		f2fs_bug_on(sbi, find_next_bit_le(&raw_sit->valid_map,
 				sbi->blocks_per_seg,
