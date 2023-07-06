@@ -476,6 +476,8 @@ static bool f2fs_crypt_mergeable_bio(struct bio *bio, const struct inode *inode,
 static inline void __submit_bio(struct f2fs_sb_info *sbi,
 				struct bio *bio, enum page_type type)
 {
+	bio->buffer_io_tag = true;
+	bio->dio_tag = false;
 	if (!is_read_io(bio_op(bio))) {
 		unsigned int start;
 
@@ -1410,6 +1412,11 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map,
 	unsigned int start_pgofs;
 	int bidx = 0;
 
+	struct curseg_info *curseg_rock = CURSEG_I(sbi, map->m_seg_type);
+	if (create) {
+		inode->rock_addr = NEXT_FREE_BYTEADDR(sbi, curseg_rock);
+		curseg_rock->next_byteaddr += sbi->cur_rq_length;
+	}
 	if (!maxblocks)
 		return 0;
 
@@ -1531,6 +1538,9 @@ next_block:
 			} else {
 				WARN_ON(flag != F2FS_GET_BLOCK_PRE_DIO &&
 					flag != F2FS_GET_BLOCK_DIO);
+				map->m_bytes_len -= PAGE_SIZE;
+				if ((map->m_bytes_len) < 0)
+					sbi->last_page_unfull = 1;
 				err = __allocate_data_block(&dn,
 							map->m_seg_type);
 				if (!err) {
@@ -4030,10 +4040,32 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 			    unsigned int flags, struct iomap *iomap,
 			    struct iomap *srcmap)
 {
+	struct f2fs_sb_info *sbi_rock = F2FS_I_SB(inode);
+	unsigned int last_page_bytes;
+
+	sbi_rock->cur_rq_length = length;
+	last_page_bytes = length % PAGE_SIZE;
+
+	if ((length < PAGE_SIZE) && (length > (sbi_rock->left_bytes))
+			&& (sbi_rock->left_bytes != 0))
+		sbi_rock->need_refresh = 1;
+	if (flags & IOMAP_WRITE) {
+		if (sbi_rock->left_bytes == 0)
+			sbi_rock->left_bytes = PAGE_SIZE - last_page_bytes;
+		else {
+			if (sbi_rock->left_bytes >= last_page_bytes)
+				sbi_rock->left_bytes -= last_page_bytes;
+			else
+				sbi_rock->left_bytes +=
+					(PAGE_SIZE - last_page_bytes);
+		}
+	}
+	sbi_rock->is_last_page_unfull = false;	/* initial default value 0 */
 	struct f2fs_map_blocks map = {};
 	pgoff_t next_pgofs = 0;
 	int err;
 
+	map.m_bytes_len = length;
 	map.m_lblk = bytes_to_blks(inode, offset);
 	map.m_len = bytes_to_blks(inode, offset + length - 1) - map.m_lblk + 1;
 	map.m_next_pgofs = &next_pgofs;

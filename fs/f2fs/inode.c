@@ -360,6 +360,7 @@ static int do_read_inode(struct inode *inode)
 	inode->i_size = le64_to_cpu(ri->i_size);
 	inode->i_blocks = SECTOR_FROM_BLOCK(le64_to_cpu(ri->i_blocks) - 1);
 
+	inode->rock_addr = le64_to_cpu(ri->rock_addr);
 	inode->i_atime.tv_sec = le64_to_cpu(ri->i_atime);
 	inode->i_ctime.tv_sec = le64_to_cpu(ri->i_ctime);
 	inode->i_mtime.tv_sec = le64_to_cpu(ri->i_mtime);
@@ -595,6 +596,7 @@ void f2fs_update_inode(struct inode *inode, struct page *node_page)
 
 	ri = F2FS_INODE(node_page);
 
+	ri->rock_addr = cpu_to_le64(inode->rock_addr);
 	ri->i_mode = cpu_to_le16(inode->i_mode);
 	ri->i_advise = F2FS_I(inode)->i_advise;
 	ri->i_uid = cpu_to_le32(i_uid_read(inode));

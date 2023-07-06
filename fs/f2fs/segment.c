@@ -3332,6 +3332,7 @@ void f2fs_allocate_data_block(struct f2fs_sb_info *sbi, struct page *page,
 		struct f2fs_summary *sum, int type,
 		struct f2fs_io_info *fio)
 {
+	u64 rock_addr_bio;
 	struct sit_info *sit_i = SIT_I(sbi);
 	struct curseg_info *curseg = CURSEG_I(sbi, type);
 	unsigned long long old_mtime;
@@ -3351,6 +3352,9 @@ void f2fs_allocate_data_block(struct f2fs_sb_info *sbi, struct page *page,
 	}
 	*new_blkaddr = NEXT_FREE_BLKADDR(sbi, curseg);
 
+	rock_addr_bio = NEXT_FREE_BLKADDR(sbi, curseg);
+	sbi->rock_addr = rock_addr_bio;
+
 	f2fs_bug_on(sbi, curseg->next_blkoff >= sbi->blocks_per_seg);
 
 	f2fs_wait_discard_bio(sbi, *new_blkaddr);
@@ -3361,6 +3365,13 @@ void f2fs_allocate_data_block(struct f2fs_sb_info *sbi, struct page *page,
 	 * current summary block.
 	 */
 	__add_sum_entry(sbi, type, sum);
+
+	if (sbi->last_page_unfull == 0 || sbi->left_bytes == 0
+			|| NEXT_FREE_BLKADDR(sbi, curseg) < 98304
+			|| sbi->refresh == 1){
+		__refresh_next_blkoff(sbi, curseg);
+		sbi->refresh = 0;
+	}
 
 	__refresh_next_blkoff(sbi, curseg);
 

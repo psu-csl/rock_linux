@@ -49,6 +49,7 @@ static struct inode *f2fs_new_inode(struct user_namespace *mnt_userns,
 
 	inode_init_owner(mnt_userns, inode, dir, mode);
 
+	inode->rock_addr = 0;
 	inode->i_ino = ino;
 	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);

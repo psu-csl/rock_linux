@@ -244,6 +244,9 @@ typedef unsigned int blk_qc_t;
  * stacking drivers)
  */
 struct bio {
+	bool			dio_tag;
+	bool			buffer_io_tag;
+	u64			rock_addr;
 	struct bio		*bi_next;	/* request queue link */
 	struct block_device	*bi_bdev;
 	unsigned int		bi_opf;		/* bottom bits req flags,

@@ -233,6 +233,7 @@ struct f2fs_extent {
 #define F2FS_COMPRESS_RELEASED	0x80	/* file released compressed blocks */
 
 struct f2fs_inode {
+	__le64 rock_addr;		/* rock addr in f2fs */
 	__le16 i_mode;			/* file mode */
 	__u8 i_advise;			/* file hints */
 	__u8 i_inline;			/* file inline flags */
