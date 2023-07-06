@@ -56,6 +56,7 @@ static void iomap_dio_submit_bio(const struct iomap_iter *iter,
 {
 	bio->rock_addr = iter->inode->rock_addr;
 	bio->buffer_io_tag = false;
+	bio->dio_tag = true;
 	atomic_inc(&dio->ref);
 
 	if (dio->iocb->ki_flags & IOCB_HIPRI) {
@@ -366,8 +367,9 @@ zero_tail:
 	    ((dio->flags & IOMAP_DIO_WRITE) && pos >= i_size_read(inode))) {
 		/* zero out from the end of the write to the end of the block */
 		pad = pos & (fs_block_size - 1);
-		if (pad)
-			iomap_dio_zero(iter, dio, pos, fs_block_size - pad);
+		/* remove zero padding */
+		//if (pad)
+		//	iomap_dio_zero(iter, dio, pos, fs_block_size - pad);
 	}
 out:
 	/* Undo iter limitation to current extent */
