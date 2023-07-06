@@ -15,6 +15,13 @@
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 
+struct rock_rq {
+       unsigned int rock_bb_offset; //begin byte offset for W/R ops in the page
+       bool dio_tag;		// to indicate W/R type (zone/normal)
+       u32 left_bytes;		// track how many current IO bytes left
+       u64 rock_addr;  // for IO
+};
+
 struct nullb_cmd {
 	struct request *rq;
 	struct bio *bio;
