@@ -1540,7 +1540,7 @@ next_block:
 					flag != F2FS_GET_BLOCK_DIO);
 				map->m_bytes_len -= PAGE_SIZE;
 				if ((map->m_bytes_len) < 0)
-					sbi->last_page_unfull = 1;
+					sbi->is_last_page_unfull = 1;
 				err = __allocate_data_block(&dn,
 							map->m_seg_type);
 				if (!err) {

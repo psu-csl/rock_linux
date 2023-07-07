@@ -3366,7 +3366,7 @@ void f2fs_allocate_data_block(struct f2fs_sb_info *sbi, struct page *page,
 	 */
 	__add_sum_entry(sbi, type, sum);
 
-	if (sbi->last_page_unfull == 0 || sbi->left_bytes == 0
+	if (sbi->is_last_page_unfull == 0 || sbi->left_bytes == 0
 			|| NEXT_FREE_BLKADDR(sbi, curseg) < 98304
 			|| sbi->refresh == 1){
 		__refresh_next_blkoff(sbi, curseg);
